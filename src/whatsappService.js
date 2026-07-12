@@ -1,5 +1,6 @@
 const axios = require('axios');
 const googleSheetsService = require('./googleSheetsService');
+const s3Service = require('./s3Service');
 
 // States
 const STATE_INIT = 'INIT';
@@ -15,7 +16,8 @@ const STATE_PATIENT_CONTACT_INFO = 'PATIENT_CONTACT_INFO';
 const STATE_PATIENT_EVENT_CONFIRM = 'PATIENT_EVENT_CONFIRM';
 const STATE_COMPANY_CONTACT_INFO = 'COMPANY_CONTACT_INFO';
 const STATE_COMPLETED = 'COMPLETED';
-const PRECIO_BOLETO = 599;
+const PRECIO_BOLETO = 699;
+const PRECIO_ORIGINAL = '1,199';
 
 
 // Option Names Mapping
@@ -46,6 +48,7 @@ const processMessage = async (message, contact) => {
     let text = '';
     let interactiveId = null;
     let mediaId = null;
+    let mimeType = null;
 
     if (message.type === 'text' && message.text) {
         text = message.text.body;
@@ -59,9 +62,11 @@ const processMessage = async (message, contact) => {
         }
     } else if (message.type === 'image' && message.image) {
         mediaId = message.image.id;
+        mimeType = message.image.mime_type || 'image/jpeg';
         text = `[Imagen/Comprobante ID: ${mediaId}]`;
     } else if (message.type === 'document' && message.document) {
         mediaId = message.document.id;
+        mimeType = message.document.mime_type || 'application/pdf';
         text = `[Documento/Comprobante ID: ${mediaId}]`;
     } else if (message.text) {
         text = message.text.body;
@@ -130,7 +135,7 @@ const processMessage = async (message, contact) => {
             if (option === '1') {
                 const infoText =
                     `¡Excelente! Aprovecha el -40%OFF de descuento en tu entrada a Six Flags, comprando con nosotros a través de Versus Epilepsia. Conoce las características del boleto:\n\n` +
-                    `• El precio con nosotros por boleto es de *$599* (Precio Normal $999).\n` +
+                    `• El precio con nosotros por boleto es de *$` + PRECIO_BOLETO + `* (Precio Normal $` + PRECIO_ORIGINAL + `).\n` +
                     `• El boleto es de *Admisión General*, podrás disfrutar del parque y sólo si lo deseas acompañarnos en nuestro Festival Versus Epilepsia (8 y 9 de agosto de 2026).\n` +
                     `• La vigencia del boleto es del *8 de agosto al 8 de octubre de 2026*.\n` +
                     `• El boleto es digital, se te envía una vez realizada la compra.\n` +
@@ -152,7 +157,7 @@ const processMessage = async (message, contact) => {
                 const infoText =
                     `¡Excelente! Acompáñanos al Festival Superhéroes Versus Epilepsia en Six Flags 2026. Un espacio para conocer más sobre la epilepsia y su tratamiento, especialmente de la neurocirugía. Participa de nuestras actividades lúdicas, concursos, foro de especialistas, inauguración con nuestro embajador el actor, escritor y conferencista ¡Odin Dupeyron! Adicional, entra al parque con un -40% OFF. Conoce las características de la entrada:\n\n` +
                     `• El festival se llevará a cabo en Six Flags, los días *sábado 8 y domingo 9 de agosto*.\n` +
-                    `• El precio del boleto por persona es de *$599* (Precio Normal $999).\n` +
+                    `• El precio del boleto por persona es de *$` + PRECIO_BOLETO + `* (Precio Normal $` + PRECIO_ORIGINAL + `).\n` +
                     `• Tu boleto es personal y válido sólo para una de las dos fechas.\n` +
                     `• Incluye acceso general al parque para disfrutar de los juegos.\n` +
                     `• El boleto es digital, se te envía una vez realizada la compra.\n` +
@@ -348,10 +353,32 @@ const processMessage = async (message, contact) => {
         }
 
         case STATE_WAIT_PAYMENT_PROOF: {
-            await sendWhatsAppMessage(from, `Llena el siguiente formulario que te tomará 2 minutos 🚀\n\n📝 *[Enlace formulario]*\n${URL_FORM}`);
-            await sendWhatsAppMessage(from, `Una vez validada tu compra por nuestro equipo, recibirás tus boletos por mensaje directo desde el Whatsapp de Versus Epilepsia(5586214843) 🎪\n(La validación puede tardar entre 1 y 3 días hábiles) ¡Gracias por apoyar a Versus Epilepsia! \n ¡Ya eres un superhéroe VERSUS EPILEPSIA, nos vemos en SIX FLAGS! `);
+            // Validar que sea imagen o documento adjunto
+            if (message.type !== 'image' && message.type !== 'document') {
+                await sendWhatsAppMessage(from, '⚠️ Adjunta tu comprobante (imagen o PDF).');
+                return;
+            }
 
-            await googleSheetsService.archiveSession(from, { paymentProof: text });
+            // Subir comprobante a Google Drive
+            let proofUrl = mediaId; // fallback al ID si falla el upload
+            try {
+                await sendWhatsAppMessage(from, '⏳ Recibimos tu comprobante, un momento...');
+                proofUrl = await s3Service.uploadPaymentProof(mediaId, from, mimeType);
+            } catch (driveErr) {
+                console.error('[Drive] Error uploading payment proof. mediaId:', mediaId, '| message:', driveErr.message);
+                console.error('[Drive] Stack:', driveErr.stack);
+                if (driveErr.response) {
+                    console.error('[Drive] API response:', JSON.stringify(driveErr.response.data || driveErr.response.status));
+                }
+                // No interrumpir el flujo si falla el upload
+            }
+
+            await sendWhatsAppMessage(from,
+                `Llena el siguiente formulario que te tomará 2 minutos para completar tu registro y enviarte tus boletos digitales 🚀\n\n📝 *[Enlace formulario]*\n${URL_FORM}`);
+            await sendWhatsAppMessage(from,
+                `Una vez validada tu compra por nuestro equipo, recibirás tus boletos por mensaje directo del WhatsApp de Versus Epilepsia (5586214843)\n(La validación puede tardar entre 1 y 3 días hábiles) \n ¡Ya eres un  *superhéroe Versus Epilepsia*, nos vemos en Six Flags! 🦸`);
+
+            await googleSheetsService.archiveSession(from, { paymentProof: proofUrl });
             break;
         }
 
@@ -384,7 +411,7 @@ const processMessage = async (message, contact) => {
                 const infoText =
                     `¡Excelente! Acompáñanos al Festival Superhéroes Versus Epilepsia en Six Flags 2026. Un espacio para conocer más sobre la epilepsia y su tratamiento, especialmente de la neurocirugía. Participa de nuestras actividades lúdicas, concursos, foro de especialistas, inauguración con nuestro embajador el actor, escritor y conferencista ¡Odin Dupeyron! Adicional, entra al parque con un -40% OFF. Conoce las características de la entrada:\n\n` +
                     `• El festival se llevará a cabo en Six Flags, los días *sábado 8 y domingo 9 de agosto*.\n` +
-                    `• El precio del boleto por persona es de *$599* (Precio Normal $999).\n` +
+                    `• El precio del boleto por persona es de *$` + PRECIO_BOLETO + `* (Precio Normal $` + PRECIO_ORIGINAL + `).\n` +
                     `• Tu boleto es personal y válido sólo para una de las dos fechas.\n` +
                     `• Incluye acceso general al parque para disfrutar de los juegos.\n` +
                     `• El boleto es digital, se te envía una vez realizada la compra.\n` +
@@ -444,7 +471,7 @@ const processMessage = async (message, contact) => {
 async function showMainMenu(from, name) {
     const welcomeHeader = `¡Hola, ${name}! 👋`;
     const welcomeBody =
-        `Gracias por tu interés por ser parte de nuestro evento en *Six Flags 2026* 🎢\n\n` +
+        `Gracias por tu interés por ser parte de nuestro festival *Super Héroes Versus Epilepsia* en Six Flags 2026. Soy un chatbot que te apoyará en tu proceso de compra🎢\n\n` +
         `Elige la opción del menú que mejor te describa:`;
 
     await sendInteractiveList(

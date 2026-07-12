@@ -4,6 +4,15 @@ const { JWT } = require('google-auth-library');
 let doc = null;
 let isDocLoaded = false;
 
+const getMexicoCityTime = () => {
+    return new Intl.DateTimeFormat('es-MX', {
+        timeZone: 'America/Mexico_City',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+    }).format(new Date());
+};
+
 const getDoc = async () => {
     if (doc && isDocLoaded) return doc;
 
@@ -40,7 +49,7 @@ const getDoc = async () => {
             try {
                 await sheet0.loadHeaderRow();
             } catch (e) {
-                await sheet0.setHeaderRow(['Teléfono', 'Estado', 'Nombre', 'Opcion', 'Email', 'Detalle', 'Comprobante']);
+                await sheet0.setHeaderRow(['Teléfono', 'Estado', 'Nombre', 'Opcion', 'Detalle', 'Comprobante']);
             }
 
             // Sheet 1 (Completed Sessions)
@@ -51,7 +60,7 @@ const getDoc = async () => {
             try {
                 await sheet1.loadHeaderRow();
             } catch (e) {
-                await sheet1.setHeaderRow(['Teléfono', 'Nombre', 'Opcion', 'Email', 'Detalle', 'Comprobante', 'Fecha']);
+                await sheet1.setHeaderRow(['Teléfono', 'Nombre', 'Opcion', 'Detalle', 'Comprobante', 'Fecha']);
             }
 
             // Sheet 2 (Sponsor Sessions)
@@ -100,7 +109,6 @@ const getSession = async (phoneNumber) => {
             state: userRow.get('Estado'),
             name: userRow.get('Nombre'),
             option: userRow.get('Opcion'),
-            email: userRow.get('Email'),
             detail: userRow.get('Detalle'),
             paymentProof: userRow.get('Comprobante'),
             _row: userRow
@@ -117,7 +125,6 @@ const createSession = async (phoneNumber, name = '', initialState = 'INIT') => {
         'Estado': initialState,
         'Nombre': name,
         'Opcion': '',
-        'Email': '',
         'Detalle': '',
         'Comprobante': ''
     });
@@ -132,7 +139,6 @@ const updateSession = async (phoneNumber, data) => {
         if (data.state) userRow.set('Estado', data.state);
         if (data.name !== undefined) userRow.set('Nombre', data.name);
         if (data.option !== undefined) userRow.set('Opcion', data.option);
-        if (data.email !== undefined) userRow.set('Email', data.email);
         if (data.detail !== undefined) userRow.set('Detalle', data.detail);
         if (data.paymentProof !== undefined) userRow.set('Comprobante', data.paymentProof);
         await userRow.save();
@@ -148,10 +154,9 @@ const archiveSession = async (phoneNumber, additionalData = {}) => {
         'Teléfono': session.phone,
         'Nombre': session.name,
         'Opcion': session.option,
-        'Email': additionalData.email || session.email || '',
         'Detalle': additionalData.detail || session.detail || '',
         'Comprobante': additionalData.paymentProof || session.paymentProof || '',
-        'Fecha': new Date().toISOString()
+        'Fecha': getMexicoCityTime()
     });
     await session._row.delete();
 };
@@ -165,7 +170,7 @@ const archiveSponsorSession = async (phoneNumber, detail) => {
         'Teléfono': session.phone,
         'Nombre': session.name,
         'Detalle': detail || session.detail || '',
-        'Fecha': new Date().toISOString()
+        'Fecha': getMexicoCityTime()
     });
     await session._row.delete();
 };
@@ -179,7 +184,7 @@ const savePatientInfo = async (phoneNumber, detail) => {
         'Teléfono': session.phone,
         'Nombre': session.name,
         'Detalle': detail || session.detail || '',
-        'Fecha': new Date().toISOString()
+        'Fecha': getMexicoCityTime()
     });
 };
 

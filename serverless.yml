@@ -16,6 +16,16 @@ provider:
     GOOGLE_PRIVATE_KEY: ${env:GOOGLE_PRIVATE_KEY}
     PhoneNumberID: ${env:PhoneNumberID}
     SERVICE_ACTIVE: ${env:SERVICE_ACTIVE}
+    GOOGLE_DRIVE_FOLDER_ID: ${env:GOOGLE_DRIVE_FOLDER_ID}
+    S3_BUCKET_COMPROBANTES: versus-epilepsia-comprobantes
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:PutObjectAcl
+          Resource: arn:aws:s3:::versus-epilepsia-comprobantes/*
 
 functions:
   webhook:

@@ -15,8 +15,11 @@
     "serverless-dotenv-plugin": "^6.0.0"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1085.0",
+    "@aws-sdk/s3-request-presigner": "^3.1085.0",
     "axios": "^1.13.2",
     "google-auth-library": "^9.0.0",
-    "google-spreadsheet": "^4.1.4"
+    "google-spreadsheet": "^4.1.4",
+    "googleapis": "^173.0.0"
   }
 }
